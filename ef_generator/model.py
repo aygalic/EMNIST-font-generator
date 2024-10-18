@@ -1,12 +1,11 @@
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-from datasets import load_dataset
-from sklearn.model_selection import train_test_split
-import torchvision
 
+from torch.utils.data import DataLoader, random_split
+from torchvision import transforms
+from torchvision.datasets import EMNIST
 
 
 class CNNAutoencoder(pl.LightningModule):
@@ -37,14 +36,14 @@ class CNNAutoencoder(pl.LightningModule):
         return decoded
 
     def training_step(self, batch, batch_idx):
-        x = batch['image']
+        x = batch[0]
         x_hat = self(x)
         loss = F.mse_loss(x_hat, x)
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x = batch['image']
+        x = batch[0]
         x_hat = self(x)
         loss = F.mse_loss(x_hat, x)
         self.log('val_loss', loss)
@@ -53,42 +52,35 @@ class CNNAutoencoder(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
+
 class EMNISTDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size: int = 32):
+    def __init__(self, data_dir: str = "./data", batch_size: int = 32):
         super().__init__()
+        self.data_dir = data_dir
         self.batch_size = batch_size
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])
 
     def prepare_data(self):
         # Download the dataset
-        load_dataset("tanganke/emnist_letters")
+        EMNIST(self.data_dir, split='letters', train=True, download=True)
+        EMNIST(self.data_dir, split='letters', train=False, download=True)
 
     def setup(self, stage=None):
-        # Load the dataset
-        dataset = load_dataset("tanganke/emnist_letters")
+        if stage == 'fit' or stage is None:
+            emnist_full = EMNIST(self.data_dir, split='letters', train=True, transform=self.transform)
+            self.emnist_train, self.emnist_val = random_split(emnist_full, [0.9, 0.1])
+
+        if stage == 'test' or stage is None:
+            self.emnist_test = EMNIST(self.data_dir, split='letters', train=False, transform=self.transform)
         
-        # Preprocess function
-        def preprocess(examples):
-            tensor_img = [torchvision.transforms.functional.pil_to_tensor(img) for img in examples['image']]
-            examples['image'] = [torch.tensor(img, dtype=torch.float32).unsqueeze(0) / 255.0 for img in tensor_img]
-            return examples
-
-        # Apply preprocessing
-        dataset = dataset.map(preprocess, batched=True)
-
-        # Split the training set into train and validation
-        train_val_data = dataset['train']
-        train_indices, val_indices = train_test_split(range(len(train_val_data)), test_size=0.1, random_state=42)
-
-        self.train_data = train_val_data.select(train_indices)
-        self.val_data = train_val_data.select(val_indices)
-        self.test_data = dataset['test']
-
     def train_dataloader(self):
-        return DataLoader(self.train_data, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(self.emnist_train, batch_size=self.batch_size, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_data, batch_size=self.batch_size)
+        return DataLoader(self.emnist_val, batch_size=self.batch_size)
 
     def test_dataloader(self):
-        return DataLoader(self.test_data, batch_size=self.batch_size)
-
+        return DataLoader(self.emnist_test, batch_size=self.batch_size)

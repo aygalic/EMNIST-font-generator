@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "emnist-font-generator"
+name = "ef_generator"
 version = "0.1.0"
 description = "Using GenAI to create a font based on EMNIST"
 authors = ["aygalic <aygalic@hotmail.fr>"]
@@ -7,13 +7,16 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-pytorch = "^1.0.2"
 numpy = "^2.1.2"
 pandas = "^2.2.3"
 matplotlib = "^3.9.2"
 scikit-learn = "^1.5.2"
 seaborn = "^0.13.2"
+torch = "^2.5.0"
 
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
 
 [build-system]
 requires = ["poetry-core"]

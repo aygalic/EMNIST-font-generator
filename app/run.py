@@ -11,7 +11,7 @@ import torch
 
 from sklearn.manifold import TSNE
 import numpy as np
-
+from sklearn.decomposition import PCA
 
 def visualize_samples(data_module, num_samples=25, cols=5):
     # Ensure the data is prepared and set up
@@ -82,17 +82,67 @@ def visualize_latent_space(model, data_module, n_samples=1000, perplexity=30):
     labels = np.array(labels[:n_samples])
     breakpoint()
     # Apply t-SNE
-    tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
-    latent_tsne = tsne.fit_transform(latent_representations)
+    #tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+    #latent_tsne = tsne.fit_transform(latent_representations)
     
+    pca = PCA(n_components=2)
+    latent_compressed = pca.fit_transform(latent_representations)
+    
+
     # Plot the results
     plt.figure(figsize=(10, 10))
-    scatter = plt.scatter(latent_tsne[:, 0], latent_tsne[:, 1], c=labels, cmap='tab20')
+    scatter = plt.scatter(latent_compressed[:, 0], latent_compressed[:, 1], c=labels, cmap='tab20')
     plt.colorbar(scatter)
     plt.title('t-SNE visualization of the latent space')
     plt.xlabel('t-SNE feature 1')
     plt.ylabel('t-SNE feature 2')
     plt.show()
+
+import torch
+import matplotlib.pyplot as plt
+import numpy as np
+
+def visualize_reconstructions(model, data_module, num_samples=5):
+    # Set the model to evaluation mode
+    model.eval()
+    
+    # Prepare the data
+    data_module.setup()
+    dataloader = data_module.train_dataloader()
+    
+    # Get a batch of data
+    batch = next(iter(dataloader))
+    images, labels = batch
+    
+    # Select a subset of images
+    images = images[:num_samples]
+    labels = labels[:num_samples]
+    
+    # Get reconstructions
+    with torch.no_grad():
+        reconstructions = model(images)
+    
+    # Plot original images and reconstructions
+    fig, axes = plt.subplots(2, num_samples, figsize=(num_samples * 3, 6))
+    
+    for i in range(num_samples):
+        # Original image
+        axes[0, i].imshow(images[i].squeeze().cpu().numpy(), cmap='gray')
+        axes[0, i].set_title(f"Original: {chr(labels[i].item() + 96)}")
+        axes[0, i].axis('off')
+        
+        # Reconstructed image
+        axes[1, i].imshow(reconstructions[i].squeeze().cpu().numpy(), cmap='gray')
+        axes[1, i].set_title("Reconstructed")
+        axes[1, i].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+    # Compute and print reconstruction error
+    mse = torch.nn.functional.mse_loss(images, reconstructions)
+    print(f"Average reconstruction error (MSE): {mse.item():.4f}")
+
 
 
 model = CNNAutoencoder()
@@ -100,10 +150,10 @@ data_module = EMNISTDataModule()
 
 visualize_samples(data_module, num_samples=25, cols=5)
 
-trainer = pl.Trainer(max_epochs=1,precision="16-mixed")
+trainer = pl.Trainer(max_epochs=1, precision="16-mixed")
 trainer.fit(model, data_module)
 
-
+visualize_reconstructions(model, data_module, num_samples=5)
 
 # Load the trained model
 visualize_latent_space(model, data_module, n_samples=1000, perplexity=30)

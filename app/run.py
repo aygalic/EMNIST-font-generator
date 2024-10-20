@@ -80,7 +80,7 @@ def visualize_latent_space(model, data_module, n_samples=1000, perplexity=30):
     # Convert to numpy arrays
     latent_representations = np.array(latent_representations[:n_samples])
     labels = np.array(labels[:n_samples])
-    breakpoint()
+
     # Apply t-SNE
     #tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
     #latent_tsne = tsne.fit_transform(latent_representations)

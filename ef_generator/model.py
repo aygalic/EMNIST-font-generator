@@ -11,21 +11,38 @@ from torchvision.datasets import EMNIST
 class CNNAutoencoder(pl.LightningModule):
     def __init__(self):
         super().__init__()
+        self.dropout = 0.2
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 16, 3, stride=2, padding=1),
             nn.ReLU(),
+            nn.Dropout(self.dropout),
             nn.Conv2d(16, 32, 3, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, 7)
+            nn.Dropout(self.dropout),
+            nn.Conv2d(32, 64, 7),
+            nn.ReLU(),
+            nn.Dropout(self.dropout),
+
+            nn.Flatten(),  # Flatten the output
+            nn.Linear(64,26),
+            nn.ReLU(),
+            nn.Dropout(self.dropout),
+
         )
         
         # Decoder
         self.decoder = nn.Sequential(
+            nn.Linear(26,64),
+            nn.ReLU(),
+            nn.Dropout(self.dropout),
+            nn.Unflatten(1, (64, 1, 1)),  # Reshape to (64, 1, 1)
             nn.ConvTranspose2d(64, 32, 7),
             nn.ReLU(),
+            nn.Dropout(self.dropout),
             nn.ConvTranspose2d(32, 16, 3, stride=2, padding=1, output_padding=1),
             nn.ReLU(),
+            nn.Dropout(self.dropout),
             nn.ConvTranspose2d(16, 1, 3, stride=2, padding=1, output_padding=1),
             nn.Sigmoid()
         )

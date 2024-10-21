@@ -178,6 +178,50 @@ def visualize_generated_samples(model, num_samples=5):
     plt.tight_layout()
     plt.show()
 
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+
+def visualize_latent_manifold(model, n=20, digit_size=28):
+    # Set model to eval mode
+    model.eval()
+
+    # Create a grid of latent variables
+    grid_x = np.linspace(-3, 3, n)
+    grid_y = np.linspace(-3, 3, n)[::-1]
+
+    figure = np.zeros((digit_size * n, digit_size * n))
+
+    # Generate images for each grid point
+    with torch.no_grad():
+        for i, yi in enumerate(grid_y):
+            for j, xi in enumerate(grid_x):
+                z_sample = torch.tensor([[xi, yi] + [0] * (model.latent_dim - 2)], dtype=torch.float32)
+                x_decoded = model.decode(z_sample)
+                digit = x_decoded[0].reshape(digit_size, digit_size)
+                figure[i * digit_size: (i + 1) * digit_size,
+                       j * digit_size: (j + 1) * digit_size] = digit.cpu().numpy()
+
+    # Plot the result
+    plt.figure(figsize=(10, 10))
+    start_range = digit_size // 2
+    end_range = n * digit_size + start_range
+    pixel_range = np.arange(start_range, end_range, digit_size)
+    sample_range_x = np.round(grid_x, 1)
+    sample_range_y = np.round(grid_y, 1)
+    plt.xticks(pixel_range, sample_range_x)
+    plt.yticks(pixel_range, sample_range_y)
+    plt.xlabel("z[0]")
+    plt.ylabel("z[1]")
+    plt.imshow(figure, cmap='Greys_r')
+    plt.title("Latent Space Manifold")
+    plt.show()
+
+# Usage example:
+# vae = VAE(latent_dim=26)
+# visualize_latent_manifold(vae)
+
+
 model = VAE()
 data_module = EMNISTDataModule()
 
@@ -193,3 +237,5 @@ visualize_latent_space(model, data_module, n_samples=1000, perplexity=30)
 
 
 visualize_generated_samples(model)
+
+visualize_latent_manifold(model)

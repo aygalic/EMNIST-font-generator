@@ -7,10 +7,10 @@ from torchvision import transforms
 from torchvision.datasets import EMNIST
 
 class VAE(pl.LightningModule):
-    def __init__(self, latent_dim=26):
+    def __init__(self, latent_dim=2):
         super().__init__()
         self.latent_dim = latent_dim
-        self.dropout = 0.2
+        self.dropout = 0
 
         # Encoder
         self.encoder = nn.Sequential(

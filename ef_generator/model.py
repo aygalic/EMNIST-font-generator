@@ -2,16 +2,16 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 from torchvision.datasets import EMNIST
 
-
-class CNNAutoencoder(pl.LightningModule):
-    def __init__(self):
+class VAE(pl.LightningModule):
+    def __init__(self, latent_dim=26):
         super().__init__()
+        self.latent_dim = latent_dim
         self.dropout = 0.2
+
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 16, 3, stride=2, padding=1),
@@ -23,20 +23,17 @@ class CNNAutoencoder(pl.LightningModule):
             nn.Conv2d(32, 64, 7),
             nn.ReLU(),
             nn.Dropout(self.dropout),
-
-            nn.Flatten(),  # Flatten the output
-            nn.Linear(64,26),
-            nn.ReLU(),
-            nn.Dropout(self.dropout),
-
+            nn.Flatten(),
         )
         
+        # Latent space
+        self.fc_mu = nn.Linear(64, latent_dim)
+        self.fc_var = nn.Linear(64, latent_dim)
+
         # Decoder
+        self.decoder_input = nn.Linear(latent_dim, 64)
         self.decoder = nn.Sequential(
-            nn.Linear(26,64),
-            nn.ReLU(),
-            nn.Dropout(self.dropout),
-            nn.Unflatten(1, (64, 1, 1)),  # Reshape to (64, 1, 1)
+            nn.Unflatten(1, (64, 1, 1)),
             nn.ConvTranspose2d(64, 32, 7),
             nn.ReLU(),
             nn.Dropout(self.dropout),
@@ -47,28 +44,46 @@ class CNNAutoencoder(pl.LightningModule):
             nn.Sigmoid()
         )
 
+    def encode(self, x):
+        x = self.encoder(x)
+        mu = self.fc_mu(x)
+        log_var = self.fc_var(x)
+        return mu, log_var
+
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        z = self.decoder_input(z)
+        return self.decoder(z)
+
     def forward(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return decoded
+        mu, log_var = self.encode(x)
+        z = self.reparameterize(mu, log_var)
+        return self.decode(z), mu, log_var
 
     def training_step(self, batch, batch_idx):
         x = batch[0]
-        x_hat = self(x)
-        loss = F.mse_loss(x_hat, x)
+        x_hat, mu, log_var = self(x)
+        recon_loss = F.mse_loss(x_hat, x, reduction='sum')
+        kl_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        loss = recon_loss + kl_div
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x = batch[0]
-        x_hat = self(x)
-        loss = F.mse_loss(x_hat, x)
+        x_hat, mu, log_var = self(x)
+        recon_loss = F.mse_loss(x_hat, x, reduction='sum')
+        kl_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        loss = recon_loss + kl_div
         self.log('val_loss', loss)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
-
 
 class EMNISTDataModule(pl.LightningDataModule):
     def __init__(self, data_dir: str = "./data", batch_size: int = 32):
@@ -81,7 +96,6 @@ class EMNISTDataModule(pl.LightningDataModule):
         ])
 
     def prepare_data(self):
-        # Download the dataset
         EMNIST(self.data_dir, split='letters', train=True, download=True)
         EMNIST(self.data_dir, split='letters', train=False, download=True)
 
@@ -92,7 +106,7 @@ class EMNISTDataModule(pl.LightningDataModule):
 
         if stage == 'test' or stage is None:
             self.emnist_test = EMNIST(self.data_dir, split='letters', train=False, transform=self.transform)
-        
+
     def train_dataloader(self):
         return DataLoader(self.emnist_train, batch_size=self.batch_size, shuffle=True)
 

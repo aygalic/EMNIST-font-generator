@@ -225,17 +225,16 @@ def visualize_latent_manifold(model, n=20, digit_size=28):
 model = VAE()
 data_module = EMNISTDataModule()
 
-visualize_samples(data_module, num_samples=25, cols=5)
+#visualize_samples(data_module, num_samples=25, cols=5)
 
-trainer = pl.Trainer(max_epochs=1, precision="16-mixed")
+trainer = pl.Trainer(max_epochs=3, precision="16-mixed")
 trainer.fit(model, data_module)
 
 visualize_reconstructions(model, data_module, num_samples=5)
 
 # Load the trained model
-visualize_latent_space(model, data_module, n_samples=1000, perplexity=30)
+#visualize_latent_space(model, data_module, n_samples=1000, perplexity=30)
 
-
-visualize_generated_samples(model)
+#visualize_generated_samples(model)
 
 visualize_latent_manifold(model)

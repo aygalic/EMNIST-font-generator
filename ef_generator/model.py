@@ -7,7 +7,7 @@ from torchvision import transforms
 from torchvision.datasets import EMNIST
 
 class VAE(pl.LightningModule):
-    def __init__(self, latent_dim=2):
+    def __init__(self, latent_dim=4):
         super().__init__()
         self.latent_dim = latent_dim
         self.dropout = 0
@@ -27,11 +27,11 @@ class VAE(pl.LightningModule):
         )
         
         # Latent space
-        self.fc_mu = nn.Linear(64, latent_dim)
-        self.fc_var = nn.Linear(64, latent_dim)
+        self.fc_mu = nn.Linear(64, self.latent_dim)
+        self.fc_var = nn.Linear(64, self.latent_dim)
 
         # Decoder
-        self.decoder_input = nn.Linear(latent_dim, 64)
+        self.decoder_input = nn.Linear(self.latent_dim, 64)
         self.decoder = nn.Sequential(
             nn.Unflatten(1, (64, 1, 1)),
             nn.ConvTranspose2d(64, 32, 7),

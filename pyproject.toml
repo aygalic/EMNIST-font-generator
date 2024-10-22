@@ -21,6 +21,7 @@ pdbpp = "^0.10.3"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
+pytest = "^8.3.3"
 
 [build-system]
 requires = ["poetry-core"]

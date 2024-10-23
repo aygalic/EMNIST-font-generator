@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 
-from ef_generator.model import VAE, EMNISTDataModule
+from ef_generator.model import VAE
+from ef_generator.emnist_data_module import EMNISTDataModule
 from ef_generator.visualization import (
     visualize_generated_samples,
     visualize_latent_manifold,

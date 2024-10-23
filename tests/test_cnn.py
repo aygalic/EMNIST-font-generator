@@ -67,11 +67,11 @@ class TestCNNArchitecture(unittest.TestCase):
 
     def test_decoder_output_shape(self):
         """Test if decoder produces output of the same size as input"""
-        decoder = self.model.encoder
+        decoder = self.model.decoder
 
         
         # Create a sample decoder input
-        decoder_input = torch.randn(self.batch_size, 64, 1, 1)
+        decoder_input = torch.randn(self.batch_size, 64)
         
         with torch.no_grad():
             output = decoder(decoder_input)

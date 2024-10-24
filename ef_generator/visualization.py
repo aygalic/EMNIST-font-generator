@@ -141,10 +141,6 @@ def visualize_reconstructions(model, data_module, num_samples=5):
     plt.tight_layout()
     plt.show()
 
-    # Compute and print reconstruction error
-    mse = torch.nn.functional.mse_loss(images, reconstructions)
-    print(f"Average reconstruction error (MSE): {mse.item():.4f}")
-
 
 def visualize_generated_samples(model, num_samples=5):
     model.eval()

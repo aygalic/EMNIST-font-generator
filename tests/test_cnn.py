@@ -1,8 +1,7 @@
 import unittest
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
-import numpy as np
+
 from ef_generator.model import VAE
 
 class TestCNNArchitecture(unittest.TestCase):

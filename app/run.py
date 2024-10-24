@@ -29,7 +29,7 @@ trainer.fit(model, data_module)
 visualize_reconstructions(model, data_module, num_samples=5)
 
 
-visualize_latent_space(model, data_module, n_samples=1000, perplexity=30)
+visualize_latent_space(model, data_module, n_samples=10000, perplexity=30)
 
 # visualize_generated_samples(model)
 

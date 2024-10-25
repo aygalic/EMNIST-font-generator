@@ -14,14 +14,14 @@ class VAE(pl.LightningModule):
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 16*self.feature_multiplier, 3, stride=2, padding=1),
-            nn.ReLU(),
             nn.Dropout(self.dropout),
+            nn.ReLU(),
             nn.Conv2d(16*self.feature_multiplier, 32*self.feature_multiplier, 3, stride=2, padding=1),
-            nn.ReLU(),
             nn.Dropout(self.dropout),
+            nn.ReLU(),
             nn.Conv2d(32*self.feature_multiplier, 64, 7),
-            nn.ReLU(),
             nn.Dropout(self.dropout),
+            nn.ReLU(),
             nn.Flatten(),
         )
         
@@ -34,12 +34,13 @@ class VAE(pl.LightningModule):
         self.decoder = nn.Sequential(
             nn.Unflatten(1, (64, 1, 1)),
             nn.ConvTranspose2d(64, 32*self.feature_multiplier, 7),
-            nn.ReLU(),
             nn.Dropout(self.dropout),
+            nn.ReLU(),
             nn.ConvTranspose2d(32*self.feature_multiplier, 16*self.feature_multiplier, 3, stride=2, padding=1, output_padding=1),
-            nn.ReLU(),
             nn.Dropout(self.dropout),
+            nn.ReLU(),
             nn.ConvTranspose2d(16*self.feature_multiplier, 1, 3, stride=2, padding=1, output_padding=1),
+            nn.Dropout(self.dropout),
             nn.Sigmoid()
         )
 

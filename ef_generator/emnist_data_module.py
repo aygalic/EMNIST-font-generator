@@ -10,7 +10,10 @@ class EMNISTDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
+            transforms.Normalize((0.1307,), (0.3081,)),
+            transforms.RandomRotation([270,270]),
+            transforms.RandomHorizontalFlip(p = 1),
+            
         ])
 
     def prepare_data(self):

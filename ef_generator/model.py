@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class VAE(pl.LightningModule):
-    def __init__(self, latent_dim=8):
+    def __init__(self, latent_dim=4):
         super().__init__()
         self.latent_dim = latent_dim
         self.dropout = 0
@@ -67,8 +67,10 @@ class VAE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x = batch[0]
         x_hat, mu, log_var = self(x)
-        recon_loss = F.mse_loss(x_hat, x, reduction='sum')
-        kl_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        recon_loss = F.mse_loss(x_hat, x, reduction='mean')
+    
+        # Scale KL by ratio of dimensions
+        kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
         loss = recon_loss + kl_div
         self.log('train_loss', loss)
         return loss

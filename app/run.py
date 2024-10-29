@@ -28,6 +28,7 @@ trainer.fit(model, data_module)
 
 
 model.set_training_phase("vae")
+# Optional: model.freeze_encoder()  # If you want to freeze encoder
 trainer = pl.Trainer(
     max_epochs=3,
     precision="16-mixed",

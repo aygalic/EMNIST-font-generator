@@ -9,7 +9,7 @@ from ef_generator.visualization import (
     visualize_reconstructions,
     visualize_samples,
 )
-from ef_generator.callbacks import ValidationLossCallback
+from ef_generator.callbacks import ValidationLossCallback, ClassificationMetricsCallback
 
 
 
@@ -22,13 +22,17 @@ data_module = EMNISTDataModule()
 trainer = pl.Trainer(
     max_epochs=3,
     precision="16-mixed",
-    callbacks=[ValidationLossCallback(print_epoch=True, decimal_places=4)],
+    callbacks=[ClassificationMetricsCallback(num_classes=26)],
     )
 trainer.fit(model, data_module)
 
 
 model.set_training_phase("vae")
-trainer = pl.Trainer(max_epochs=2)  # additional epochs for VAE training
+trainer = pl.Trainer(
+    max_epochs=3,
+    precision="16-mixed",
+    callbacks=[ValidationLossCallback(print_epoch=True, decimal_places=4)],
+    )
 trainer.fit(model, data_module)
 
 

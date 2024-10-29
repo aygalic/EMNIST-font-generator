@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 
-from ef_generator.model import VAE
+from ef_generator.model import PretrainedVAE
 from ef_generator.emnist_data_module import EMNISTDataModule
 from ef_generator.visualization import (
     visualize_generated_samples,
@@ -13,7 +13,7 @@ from ef_generator.callbacks import ValidationLossCallback
 
 
 
-model = VAE()
+model = PretrainedVAE()
 data_module = EMNISTDataModule()
 
 
@@ -25,6 +25,13 @@ trainer = pl.Trainer(
     callbacks=[ValidationLossCallback(print_epoch=True, decimal_places=4)],
     )
 trainer.fit(model, data_module)
+
+
+model.set_training_phase("vae")
+trainer = pl.Trainer(max_epochs=2)  # additional epochs for VAE training
+trainer.fit(model, data_module)
+
+
 
 visualize_reconstructions(model, data_module, num_samples=5)
 

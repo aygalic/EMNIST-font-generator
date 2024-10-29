@@ -4,12 +4,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class VAE(pl.LightningModule):
-    def __init__(self, latent_dim=4):
+    def __init__(self, latent_dim=4, n_annealing_steps=1000):
         super().__init__()
         self.latent_dim = latent_dim
         self.dropout = 0
 
         self.feature_multiplier = 4
+
+        # Annealing parameters
+        self.n_annealing_steps = n_annealing_steps
 
         # Encoder
         self.encoder = nn.Sequential(
@@ -43,6 +46,12 @@ class VAE(pl.LightningModule):
             nn.Dropout(self.dropout),
             nn.Sigmoid()
         )
+    
+    def get_kl_weight(self):
+        # Linear annealing from 0 to 1 over n_annealing_steps
+        if self.trainer.global_step > self.n_annealing_steps:
+            return 1.0
+        return self.trainer.global_step / self.n_annealing_steps
 
     def encode(self, x):
         x = self.encoder(x)
@@ -68,19 +77,24 @@ class VAE(pl.LightningModule):
         x = batch[0]
         x_hat, mu, log_var = self(x)
         recon_loss = F.mse_loss(x_hat, x, reduction='mean')
-    
         # Scale KL by ratio of dimensions
         kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
-        loss = recon_loss + kl_div
+        # Get current KL weight from annealing schedule
+        kl_weight = self.get_kl_weight()
+        loss = recon_loss + kl_weight * kl_div
+
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x = batch[0]
         x_hat, mu, log_var = self(x)
-        recon_loss = F.mse_loss(x_hat, x, reduction='sum')
-        kl_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-        loss = recon_loss + kl_div
+        recon_loss = F.mse_loss(x_hat, x, reduction='mean')
+        # Scale KL by ratio of dimensions
+        kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
+        # Get current KL weight from annealing schedule
+        kl_weight = self.get_kl_weight()
+        loss = recon_loss + kl_weight * kl_div
         self.log('val_loss', loss)
 
     def configure_optimizers(self):

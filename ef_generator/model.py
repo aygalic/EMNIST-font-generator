@@ -243,20 +243,6 @@ class PretrainedVAE(pl.LightningModule):
             self.log('val_recon_loss', recon_loss, on_step=False, on_epoch=True, prog_bar=True)
             self.log('val_kl_div', kl_div, on_step=False, on_epoch=True, prog_bar=True)
 
-
-    
-    """
-    def on_validation_epoch_end(self):
-        # Aggregate validation metrics
-        metrics = {}
-        for key in self.validation_step_outputs[0].keys():
-            metrics[key] = torch.stack([x[key] for x in self.validation_step_outputs]).mean()
-        
-        self.log_dict(metrics)
-        self.validation_step_outputs.clear()    
-    """
-
-
     def configure_optimizers(self):
         # Create parameter groups with different learning rates
         encoder_params = list(self.encoder.parameters())
@@ -289,13 +275,3 @@ class PretrainedVAE(pl.LightningModule):
                 "interval": "step"
             }
         }
-
-    def on_fit_start(self):
-        """Called when fit begins. Calculate total steps here when we're sure trainer is set."""
-        super().on_fit_start()
-        # Force recalculation of total steps
-        self._total_steps = None
-        _ = self.get_total_steps()
-        
-        # Log the total steps for verification
-        #self.log("total_training_steps", self._total_steps)

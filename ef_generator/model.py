@@ -184,8 +184,7 @@ class PretrainedVAE(pl.LightningModule):
 
     def forward(self, x):
         encoded = self.encoder(x)
-        if self.training_phase == "supervised":
-            return self.classifier(encoded)
+
         mu, log_var = self.fc_mu(encoded), self.fc_var(encoded)
         z = self.reparameterize(mu, log_var)
         return self.decode(z), mu, log_var
@@ -234,7 +233,7 @@ class PretrainedVAE(pl.LightningModule):
         
         return {'loss': total_loss}
 
-        
+
     def validation_step(self, batch, batch_idx):
         x, y = batch
         

@@ -96,7 +96,10 @@ class ClassificationMetricsCallback(pl.Callback):
             for batch in val_dataloader:
                 x, y = batch
                 x, y = x.to(device), y.to(device)
-                logits = pl_module(x)
+                # Get encoded features
+                encoded = pl_module.encoder(x)
+                # Always compute classification metrics
+                logits = pl_module.classifier(encoded)
                 preds = torch.argmax(logits, dim=1)
                 # Adjust for EMNIST labels starting at 1
                 val_preds.append(preds)

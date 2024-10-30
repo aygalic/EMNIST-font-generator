@@ -24,8 +24,6 @@ class PretrainedVAE(pl.LightningModule):
         self.feature_multiplier = 8
         self.poly_power = 2
 
-
-        self.training_phase: Literal["supervised", "vae"] = "supervised"
         # Annealing parameters
         self.n_annealing_steps = n_annealing_steps
         self.sigma = sigma
@@ -156,10 +154,6 @@ class PretrainedVAE(pl.LightningModule):
         """Unfreeze all encoder weights"""
         for param in self.encoder.parameters():
             param.requires_grad = True
-
-    def set_training_phase(self, training_phase: Literal["supervised", "vae"]):
-        assert training_phase in ["supervised", "vae"]
-        self.training_phase = training_phase
 
     def get_kl_weight(self):
         # Linear annealing from 0 to 1 over n_annealing_steps

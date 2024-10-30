@@ -9,7 +9,6 @@ class PretrainedVAE(pl.LightningModule):
     def __init__(
         self,
         latent_dim=2,
-        n_annealing_steps=1000,
         sigma=1,
         lr_encoder=1e-4,  # Lower learning rate for pretrained encoder
         lr_decoder=1e-3,  # Higher learning rate for decoder
@@ -24,10 +23,7 @@ class PretrainedVAE(pl.LightningModule):
         self.feature_multiplier = 8
         self.poly_power = 2
 
-        # Annealing parameters
-        self.n_annealing_steps = n_annealing_steps
         self.sigma = sigma
-        self.vae_step_counter = 0  # Add counter specifically for VAE training
         
         self._total_steps = None
 
@@ -154,12 +150,6 @@ class PretrainedVAE(pl.LightningModule):
         """Unfreeze all encoder weights"""
         for param in self.encoder.parameters():
             param.requires_grad = True
-
-    def get_kl_weight(self):
-        # Linear annealing from 0 to 1 over n_annealing_steps
-        if self.trainer.global_step > self.n_annealing_steps:
-            return 1.0 * self.sigma
-        return (self.trainer.global_step / self.n_annealing_steps) * self.sigma
 
     def encode(self, x):
         x = self.encoder(x)

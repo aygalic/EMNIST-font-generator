@@ -143,11 +143,11 @@ class ClassificationMetricsCallback(pl.Callback):
         for name, value in metrics.items():
             trainer.logger.log_metrics({f"val_{name}": value}, step=trainer.global_step)
         
-        # Every 5 epochs, print confusion matrix stats
-        if trainer.current_epoch % 5 == 0:
-            conf_matrix = self.metrics['confusion_matrix'](val_preds, val_targets)
-            per_class_acc = conf_matrix.diag() / conf_matrix.sum(1)
-            worst_classes = torch.argsort(per_class_acc)[:3]
-            print("\nWorst performing classes:")
-            for cls in worst_classes:
-                print(f"Class {chr(cls.item() + 65)}: {per_class_acc[cls]:.3f}")
+        # print confusion matrix stats
+
+        conf_matrix = self.metrics['confusion_matrix'](val_preds, val_targets)
+        per_class_acc = conf_matrix.diag() / conf_matrix.sum(1)
+        worst_classes = torch.argsort(per_class_acc)[:3]
+        print("\nWorst performing classes:")
+        for cls in worst_classes:
+            print(f"Class {chr(cls.item() + 65)}: {per_class_acc[cls]:.3f}")

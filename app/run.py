@@ -26,8 +26,8 @@ trainer = pl.Trainer(
     )
 trainer.fit(model, data_module)
 
-
-model.set_training_phase("vae")
+'''
+#model.set_training_phase("vae")
 # Optional: model.freeze_encoder()  # If you want to freeze encoder
 trainer = pl.Trainer(
     max_epochs=5,
@@ -35,7 +35,7 @@ trainer = pl.Trainer(
     callbacks=[ValidationLossCallback(print_epoch=True, decimal_places=4)],
     )
 trainer.fit(model, data_module)
-
+'''
 
 
 visualize_reconstructions(model, data_module, num_samples=5)

@@ -192,59 +192,49 @@ class PretrainedVAE(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        total_loss = 0
-        logs = {}
-
+        
         # Get encoded features
         encoded = self.encoder(x)
+        mu, log_var = self.fc_mu(encoded), self.fc_var(encoded)
+        z = self.reparameterize(mu, log_var)
+        x_hat = self.decode(z)
         
-        if self.training_phase == 'supervised':
-            # Classification training
-            logits = self.classifier(encoded)
-            loss = F.cross_entropy(logits, y-1)
-            acc = (logits.argmax(dim=1) == (y-1)).float().mean()
-            
-            # Explicit logging for supervised phase
-            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('train_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
-            
-            return {'loss': loss}
+        # Get current weights for each objective
+        class_weight, recon_weight, kl_weight = self.get_training_weights()
         
-        else:  # VAE training
-            # VAE components
-            mu, log_var = self.fc_mu(encoded), self.fc_var(encoded)
-            z = self.reparameterize(mu, log_var)
-            x_hat = self.decode(z)
-            
-            # Reconstruction loss
-            recon_loss = F.mse_loss(x_hat, x, reduction='mean')
-            
-            # KL divergence
-            kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
-            kl_weight = self.get_kl_weight()
-            
-            # VAE loss
-            vae_loss = self.reconstruction_weight * recon_loss + kl_weight * kl_div
-            total_loss += vae_loss
-            
-            # Optional: Add classification loss during VAE training
-            if self.classification_weight > 0:
-                class_logits = self.classifier(encoded.detach())
-                class_loss = F.cross_entropy(class_logits, y-1)
-                total_loss += self.classification_weight * class_loss
-                acc = (class_logits.argmax(dim=1) == (y-1)).float().mean()
-                
-                self.log('train_class_loss', class_loss, on_step=True, on_epoch=True, prog_bar=True)
-                self.log('train_class_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
-            
-            # Explicit logging for VAE phase
-            self.log('train_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('train_recon_loss', recon_loss, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('train_kl_div', kl_div, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('kl_weight', kl_weight, on_step=True, on_epoch=True, prog_bar=True)
-            
-            return {'loss': total_loss}
+        # Classification loss
+        logits = self.classifier(encoded)
+        classification_loss = F.cross_entropy(logits, y-1)
+        acc = (logits.argmax(dim=1) == (y-1)).float().mean()
+        
+        # Reconstruction loss
+        reconstruction_loss = F.mse_loss(x_hat, x, reduction='mean')
+        
+        # KL divergence
+        kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
+        
+        # Combined loss with dynamic weights
+        total_loss = (
+            class_weight * classification_loss +
+            recon_weight * reconstruction_loss +
+            kl_weight * kl_div
+        )
+        
+        # Logging
+        self.log('train_total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_class_loss', classification_loss, on_step=True, on_epoch=True)
+        self.log('train_recon_loss', reconstruction_loss, on_step=True, on_epoch=True)
+        self.log('train_kl_div', kl_div, on_step=True, on_epoch=True)
+        self.log('train_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
+        
+        # Log weights
+        self.log('class_weight', class_weight, on_step=True, on_epoch=True)
+        self.log('recon_weight', recon_weight, on_step=True, on_epoch=True)
+        self.log('kl_weight', kl_weight, on_step=True, on_epoch=True)
+        
+        return {'loss': total_loss}
 
+        
     def validation_step(self, batch, batch_idx):
         x, y = batch
         

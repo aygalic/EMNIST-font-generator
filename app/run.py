@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-
+from pytorch_lightning.loggers import TensorBoardLogger
 from ef_generator.model import PretrainedVAE
 from ef_generator.emnist_data_module import EMNISTDataModule
 from ef_generator.visualization import (
@@ -11,8 +11,8 @@ from ef_generator.visualization import (
 )
 from ef_generator.callbacks import ValidationLossCallback, ClassificationMetricsCallback
 
-
-
+# Initialize logger
+logger = TensorBoardLogger("lightning_logs", name="my_model")
 model = PretrainedVAE()
 data_module = EMNISTDataModule()
 
@@ -20,7 +20,7 @@ data_module = EMNISTDataModule()
 # visualize_samples(data_module, num_samples=25, cols=5)
 
 trainer = pl.Trainer(
-    max_epochs=3,
+    max_epochs=5,
     precision="16-mixed",
     callbacks=[ClassificationMetricsCallback(num_classes=26)],
     )
@@ -30,7 +30,7 @@ trainer.fit(model, data_module)
 model.set_training_phase("vae")
 # Optional: model.freeze_encoder()  # If you want to freeze encoder
 trainer = pl.Trainer(
-    max_epochs=3,
+    max_epochs=5,
     precision="16-mixed",
     callbacks=[ValidationLossCallback(print_epoch=True, decimal_places=4)],
     )

@@ -8,7 +8,7 @@ import torch.nn.functional as F
 class PretrainedVAE(pl.LightningModule):
     def __init__(
         self,
-        latent_dim=4,
+        latent_dim=2,
         n_annealing_steps=1000,
         sigma=1,
         lr_encoder=1e-4,  # Lower learning rate for pretrained encoder
@@ -21,7 +21,7 @@ class PretrainedVAE(pl.LightningModule):
         self.latent_dim = latent_dim
         self.dropout = 0
 
-        self.feature_multiplier = 2
+        self.feature_multiplier = 8
 
         self.training_phase: Literal["supervised", "vae"] = "supervised"
         # Annealing parameters

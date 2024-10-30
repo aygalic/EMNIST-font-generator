@@ -27,7 +27,8 @@ class PretrainedVAE(pl.LightningModule):
         # Annealing parameters
         self.n_annealing_steps = n_annealing_steps
         self.sigma = sigma
-
+        self.vae_step_counter = 0  # Add counter specifically for VAE training
+        
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 16 * self.feature_multiplier, 3, stride=2, padding=1),
@@ -162,11 +163,12 @@ class PretrainedVAE(pl.LightningModule):
             logits = self.classifier(encoded)
             loss = F.cross_entropy(logits, y-1)
             acc = (logits.argmax(dim=1) == (y-1)).float().mean()
-            logs.update({
-                'train_loss': loss,
-                'train_acc': acc
-            })
-            return {'loss': loss, 'logs': logs}
+            
+            # Explicit logging for supervised phase
+            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('train_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
+            
+            return {'loss': loss}
         
         else:  # VAE training
             # VAE components
@@ -187,28 +189,24 @@ class PretrainedVAE(pl.LightningModule):
             
             # Optional: Add classification loss during VAE training
             if self.classification_weight > 0:
-                class_logits = self.classifier(encoded.detach())  # Detach to prevent gradient flow to encoder
+                class_logits = self.classifier(encoded.detach())
                 class_loss = F.cross_entropy(class_logits, y-1)
                 total_loss += self.classification_weight * class_loss
                 acc = (class_logits.argmax(dim=1) == (y-1)).float().mean()
-                logs.update({
-                    'train_class_loss': class_loss,
-                    'train_class_acc': acc
-                })
+                
+                self.log('train_class_loss', class_loss, on_step=True, on_epoch=True, prog_bar=True)
+                self.log('train_class_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
             
-            logs.update({
-                'train_loss': total_loss,
-                'train_recon_loss': recon_loss,
-                'train_kl_div': kl_div,
-                'kl_weight': kl_weight
-            })
+            # Explicit logging for VAE phase
+            self.log('train_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('train_recon_loss', recon_loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('train_kl_div', kl_div, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('kl_weight', kl_weight, on_step=True, on_epoch=True, prog_bar=True)
             
-            self.log_dict(logs)
-            return {'loss': total_loss, 'logs': logs}
-            
+            return {'loss': total_loss}
+
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        output = {}
         
         # Get encoded features
         encoded = self.encoder(x)
@@ -218,10 +216,9 @@ class PretrainedVAE(pl.LightningModule):
         class_loss = F.cross_entropy(logits, y-1)
         acc = (logits.argmax(dim=1) == (y-1)).float().mean()
         
-        output.update({
-            'val_class_loss': class_loss,
-            'val_acc': acc
-        })
+        # Explicit logging for classification metrics
+        self.log('val_class_loss', class_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val_acc', acc, on_step=False, on_epoch=True, prog_bar=True)
         
         if self.training_phase == 'vae':
             # VAE validation metrics
@@ -229,15 +226,13 @@ class PretrainedVAE(pl.LightningModule):
             recon_loss = F.mse_loss(x_hat, x, reduction='mean')
             kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
             
-            output.update({
-                'val_recon_loss': recon_loss,
-                'val_kl_div': kl_div,
-            })
-        
-        self.validation_step_outputs.append(output)
-        return output
+            # Explicit logging for VAE metrics
+            self.log('val_recon_loss', recon_loss, on_step=False, on_epoch=True, prog_bar=True)
+            self.log('val_kl_div', kl_div, on_step=False, on_epoch=True, prog_bar=True)
 
 
+    
+    """
     def on_validation_epoch_end(self):
         # Aggregate validation metrics
         metrics = {}
@@ -246,7 +241,7 @@ class PretrainedVAE(pl.LightningModule):
         
         self.log_dict(metrics)
         self.validation_step_outputs.clear()    
-
+    """
 
 
     def configure_optimizers(self):

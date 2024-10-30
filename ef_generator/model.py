@@ -223,26 +223,45 @@ class PretrainedVAE(pl.LightningModule):
         
         # Get encoded features
         encoded = self.encoder(x)
+        mu, log_var = self.fc_mu(encoded), self.fc_var(encoded)
+        z = self.reparameterize(mu, log_var)
+        x_hat = self.decode(z)
         
-        # Always compute classification metrics
+        # Classification metrics
         logits = self.classifier(encoded)
-        class_loss = F.cross_entropy(logits, y-1)
+        classification_loss = F.cross_entropy(logits, y-1)
         acc = (logits.argmax(dim=1) == (y-1)).float().mean()
         
-        # Explicit logging for classification metrics
-        self.log('val_class_loss', class_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_acc', acc, on_step=False, on_epoch=True, prog_bar=True)
+        # Reconstruction loss
+        reconstruction_loss = F.mse_loss(x_hat, x, reduction='mean')
         
-        if self.training_phase == 'vae':
-            # VAE validation metrics
-            x_hat, mu, log_var = self(x)
-            recon_loss = F.mse_loss(x_hat, x, reduction='mean')
-            kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
-            
-            # Explicit logging for VAE metrics
-            self.log('val_recon_loss', recon_loss, on_step=False, on_epoch=True, prog_bar=True)
-            self.log('val_kl_div', kl_div, on_step=False, on_epoch=True, prog_bar=True)
-
+        # KL divergence
+        kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
+        
+        # Get current weights for logging purposes
+        class_weight, recon_weight, kl_weight = self.get_training_weights()
+        
+        # Calculate weighted total loss (for monitoring purposes)
+        total_loss = (
+            class_weight * classification_loss +
+            recon_weight * reconstruction_loss +
+            kl_weight * kl_div
+        )
+        
+        # Log all metrics
+        self.log_dict({
+            'val_total_loss': total_loss,
+            'val_class_loss': classification_loss,
+            'val_recon_loss': reconstruction_loss,
+            'val_kl_div': kl_div,
+            'val_acc': acc,
+            # Log individual weighted losses for analysis
+            'val_weighted_class_loss': class_weight * classification_loss,
+            'val_weighted_recon_loss': recon_weight * reconstruction_loss,
+            'val_weighted_kl_div': kl_weight * kl_div
+        }, on_step=False, on_epoch=True, prog_bar=True)
+        
+    
     def configure_optimizers(self):
         # Create parameter groups with different learning rates
         encoder_params = list(self.encoder.parameters())

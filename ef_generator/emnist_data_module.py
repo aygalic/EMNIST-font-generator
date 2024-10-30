@@ -4,7 +4,7 @@ from torchvision.datasets import EMNIST
 import pytorch_lightning as pl
 
 class EMNISTDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir: str = "./data", batch_size: int = 32):
+    def __init__(self, data_dir: str = "./data", batch_size: int = 64):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size

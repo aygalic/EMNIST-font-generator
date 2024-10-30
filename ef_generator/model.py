@@ -22,6 +22,8 @@ class PretrainedVAE(pl.LightningModule):
         self.dropout = 0
 
         self.feature_multiplier = 8
+        self.poly_power = 2
+
 
         self.training_phase: Literal["supervised", "vae"] = "supervised"
         # Annealing parameters
@@ -29,6 +31,8 @@ class PretrainedVAE(pl.LightningModule):
         self.sigma = sigma
         self.vae_step_counter = 0  # Add counter specifically for VAE training
         
+        self._total_steps = None
+
         # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 16 * self.feature_multiplier, 3, stride=2, padding=1),
@@ -101,6 +105,42 @@ class PretrainedVAE(pl.LightningModule):
         
         # Track validation metrics
         self.validation_step_outputs = []
+
+    def get_total_steps(self) -> int:
+        """Calculate total training steps for the entire training process."""
+        if self._total_steps is None:
+            # Get dataloader and trainer
+            if self.trainer is None:
+                return 1000  # Default value if trainer is not yet available
+                
+            # Calculate total steps
+            dataset_size = len(self.trainer.datamodule.train_dataloader().dataset)
+            batch_size = self.trainer.datamodule.train_dataloader().batch_size
+            max_epochs = self.trainer.max_epochs
+            accumulate_grad_batches = self.trainer.accumulate_grad_batches
+            
+            steps_per_epoch = dataset_size // (batch_size * accumulate_grad_batches)
+            self._total_steps = steps_per_epoch * max_epochs
+            
+        return self._total_steps
+
+    def get_training_weights(self):
+        """Calculate weights for different objectives based on training progress"""
+        total_steps = self.get_total_steps()
+        
+        # Get current progress (0 to 1)
+        progress = min(self.trainer.global_step / total_steps, 1.0)
+        
+        # Classification weight starts high and gradually decreases
+        classification_weight = 1.0 - 0.5 * (progress ** self.poly_power)
+        
+        # Reconstruction weight increases gradually
+        reconstruction_weight = progress ** (self.poly_power / 2)
+        
+        # KL weight increases more slowly
+        kl_weight = (progress ** self.poly_power) * self.sigma
+        
+        return classification_weight, reconstruction_weight, kl_weight
 
     def freeze_encoder(self):
         """Freeze encoder weights except for latent mappings"""
@@ -251,12 +291,38 @@ class PretrainedVAE(pl.LightningModule):
         decoder_params = list(self.decoder.parameters()) + list(self.decoder_input.parameters())
         classifier_params = list(self.classifier.parameters())
         
-        param_groups = [
+        # Create optimizer with parameter groups
+        optimizer = torch.optim.AdamW([
             {'params': encoder_params, 'lr': self.lr_encoder},
-            {'params': latent_params, 'lr': self.lr_encoder},  # Same as encoder
+            {'params': latent_params, 'lr': self.lr_encoder},
             {'params': decoder_params, 'lr': self.lr_decoder},
             {'params': classifier_params, 'lr': self.lr_classifier}
-        ]
+        ])
         
-        optimizer = torch.optim.Adam(param_groups)
-        return optimizer
+        # Get total steps for scheduler
+        total_steps = self.get_total_steps()
+        
+        # Create scheduler with calculated total steps
+        scheduler = torch.optim.lr_scheduler.PolynomialLR(
+            optimizer,
+            total_iters=total_steps,
+            power=self.poly_power/2
+        )
+        
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step"
+            }
+        }
+
+    def on_fit_start(self):
+        """Called when fit begins. Calculate total steps here when we're sure trainer is set."""
+        super().on_fit_start()
+        # Force recalculation of total steps
+        self._total_steps = None
+        _ = self.get_total_steps()
+        
+        # Log the total steps for verification
+        #self.log("total_training_steps", self._total_steps)

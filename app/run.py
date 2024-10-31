@@ -20,22 +20,11 @@ data_module = EMNISTDataModule()
 # visualize_samples(data_module, num_samples=25, cols=5)
 
 trainer = pl.Trainer(
-    max_epochs=5,
+    max_epochs=10,
     precision="16-mixed",
     callbacks=[ClassificationMetricsCallback(num_classes=26)],
     )
 trainer.fit(model, data_module)
-
-'''
-#model.set_training_phase("vae")
-# Optional: model.freeze_encoder()  # If you want to freeze encoder
-trainer = pl.Trainer(
-    max_epochs=5,
-    precision="16-mixed",
-    callbacks=[ValidationLossCallback(print_epoch=True, decimal_places=4)],
-    )
-trainer.fit(model, data_module)
-'''
 
 
 visualize_reconstructions(model, data_module, num_samples=5)

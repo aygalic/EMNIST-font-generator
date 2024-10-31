@@ -204,16 +204,16 @@ class PretrainedVAE(pl.LightningModule):
         )
         
         # Logging
-        self.log('train_total_loss', total_loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train_class_loss', classification_loss, on_step=True, on_epoch=True)
-        self.log('train_recon_loss', reconstruction_loss, on_step=True, on_epoch=True)
-        self.log('train_kl_div', kl_div, on_step=True, on_epoch=True)
-        self.log('train_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_total_loss', total_loss, on_step=True, on_epoch=False, prog_bar=True)
+        self.log('train_class_loss', classification_loss, on_step=False, on_epoch=True)
+        self.log('train_recon_loss', reconstruction_loss, on_step=False, on_epoch=True)
+        self.log('train_kl_div', kl_div, on_step=True, on_epoch=False)
+        self.log('train_acc', acc, on_step=True, on_epoch=False, prog_bar=True)
         
         # Log weights
-        self.log('class_weight', class_weight, on_step=True, on_epoch=True)
-        self.log('recon_weight', recon_weight, on_step=True, on_epoch=True)
-        self.log('kl_weight', kl_weight, on_step=True, on_epoch=True)
+        self.log('class_weight', class_weight, on_step=True, on_epoch=False)
+        self.log('recon_weight', recon_weight, on_step=True, on_epoch=False)
+        self.log('kl_weight', kl_weight, on_step=True, on_epoch=False)
         
         return {'loss': total_loss}
 

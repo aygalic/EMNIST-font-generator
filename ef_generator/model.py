@@ -24,8 +24,9 @@ class PretrainedVAE(pl.LightningModule):
         self.poly_power = 2
 
         self.sigma = sigma
-        
-        self._total_steps = None
+
+        # Register weight tensor as a buffer so it's automatically moved to the right device
+        self.register_buffer('_weight_tensor', torch.zeros(3))
 
         # Encoder
         self.encoder = nn.Sequential(
@@ -92,49 +93,38 @@ class PretrainedVAE(pl.LightningModule):
         self.lr_encoder = lr_encoder
         self.lr_decoder = lr_decoder
         self.lr_classifier = lr_classifier
-        
+
         # Training weights
         self.reconstruction_weight = reconstruction_weight
         self.classification_weight = classification_weight
-        
+
         # Track validation metrics
         self.validation_step_outputs = []
 
-    def get_total_steps(self) -> int:
-        """Calculate total training steps for the entire training process."""
-        if self._total_steps is None:
-            # Get dataloader and trainer
-            if self.trainer is None:
-                return 1000  # Default value if trainer is not yet available
-                
-            # Calculate total steps
-            dataset_size = len(self.trainer.datamodule.train_dataloader().dataset)
-            batch_size = self.trainer.datamodule.train_dataloader().batch_size
-            max_epochs = self.trainer.max_epochs
-            accumulate_grad_batches = self.trainer.accumulate_grad_batches
-            
-            steps_per_epoch = dataset_size // (batch_size * accumulate_grad_batches)
-            self._total_steps = steps_per_epoch * max_epochs
-            
-        return self._total_steps
 
     def get_training_weights(self):
-        """Calculate weights for different objectives based on training progress"""
-        total_steps = self.get_total_steps()
-        
-        # Get current progress (0 to 1)
-        progress = min(self.trainer.global_step / total_steps, 1.0)
+        """Update cached weights and return them as tuple for logging"""        
+        progress = min(self.trainer.global_step / self.trainer.estimated_stepping_batches, 1.0)
         
         # Classification weight starts high and gradually decreases
         classification_weight = 1.0 - 0.5 * (progress ** self.poly_power)
-        
         # Reconstruction weight increases gradually
         reconstruction_weight = progress ** (self.poly_power / 2)
-        
         # KL weight increases more slowly
         kl_weight = (progress ** self.poly_power) * self.sigma
         
+        # Update weights in-place
+        with torch.no_grad():
+            # Classification weight
+            self._weight_tensor[0] = classification_weight
+            # Reconstruction weight
+            self._weight_tensor[1] = reconstruction_weight
+            # KL weight
+            self._weight_tensor[2] = kl_weight
+        
+        # Return as tuple for logging purposes
         return classification_weight, reconstruction_weight, kl_weight
+
 
     def freeze_encoder(self):
         """Freeze encoder weights except for latent mappings"""
@@ -145,7 +135,7 @@ class PretrainedVAE(pl.LightningModule):
             param.requires_grad = True
         for param in self.fc_var.parameters():
             param.requires_grad = True
-    
+
     def unfreeze_encoder(self):
         """Unfreeze all encoder weights"""
         for param in self.encoder.parameters():
@@ -182,41 +172,38 @@ class PretrainedVAE(pl.LightningModule):
         z = self.reparameterize(mu, log_var)
         x_hat = self.decode(z)
         
-        # Get current weights for each objective
-        class_weight, recon_weight, kl_weight = self.get_training_weights()
         
-        # Classification loss
+        # Compute losses
         logits = self.classifier(encoded)
         classification_loss = F.cross_entropy(logits, y-1)
-        acc = (logits.argmax(dim=1) == (y-1)).float().mean()
-        
-        # Reconstruction loss
         reconstruction_loss = F.mse_loss(x_hat, x, reduction='mean')
-        
-        # KL divergence
         kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
         
-        # Combined loss with dynamic weights
-        total_loss = (
-            class_weight * classification_loss +
-            recon_weight * reconstruction_loss +
-            kl_weight * kl_div
-        )
+        # Stack losses for vectorized computation
+        losses = torch.stack([classification_loss, reconstruction_loss, kl_div])
+        
+        # Update cached weights
+        class_weight, recon_weight, kl_weight = self.get_training_weights()
+
+        # Compute total loss using cached weights
+        total_loss = torch.sum(losses * self._weight_tensor)
+        
+        # Compute accuracy
+        acc = (logits.argmax(dim=1) == (y-1)).float().mean()
         
         # Logging
-        self.log('train_total_loss', total_loss, on_step=True, on_epoch=False, prog_bar=True)
-        self.log('train_class_loss', classification_loss, on_step=False, on_epoch=True)
-        self.log('train_recon_loss', reconstruction_loss, on_step=False, on_epoch=True)
-        self.log('train_kl_div', kl_div, on_step=True, on_epoch=False)
-        self.log('train_acc', acc, on_step=True, on_epoch=False, prog_bar=True)
-        
-        # Log weights
-        self.log('class_weight', class_weight, on_step=True, on_epoch=False)
-        self.log('recon_weight', recon_weight, on_step=True, on_epoch=False)
-        self.log('kl_weight', kl_weight, on_step=True, on_epoch=False)
+        self.log_dict({
+            'train_total_loss': total_loss,
+            'train_class_loss': classification_loss,
+            'train_recon_loss': reconstruction_loss,
+            'train_kl_div': kl_div,
+            'train_acc': acc,
+            'class_weight': class_weight,
+            'recon_weight': recon_weight,
+            'kl_weight': kl_weight
+        }, on_step=True, on_epoch=False, prog_bar=True)
         
         return {'loss': total_loss}
-
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
@@ -227,70 +214,66 @@ class PretrainedVAE(pl.LightningModule):
         z = self.reparameterize(mu, log_var)
         x_hat = self.decode(z)
         
-        # Classification metrics
+        # Compute losses
         logits = self.classifier(encoded)
         classification_loss = F.cross_entropy(logits, y-1)
-        acc = (logits.argmax(dim=1) == (y-1)).float().mean()
-        
-        # Reconstruction loss
         reconstruction_loss = F.mse_loss(x_hat, x, reduction='mean')
-        
-        # KL divergence
         kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
         
-        # Get current weights for logging purposes
-        class_weight, recon_weight, kl_weight = self.get_training_weights()
+        # Stack losses for vectorized computation
+        losses = torch.stack([classification_loss, reconstruction_loss, kl_div])
         
-        # Calculate weighted total loss (for monitoring purposes)
-        total_loss = (
-            class_weight * classification_loss +
-            recon_weight * reconstruction_loss +
-            kl_weight * kl_div
-        )
+        # Compute total loss using cached weights
+        total_loss = torch.sum(losses * self._weight_tensor)
         
-        # Log all metrics
+        # Compute accuracy
+        acc = (logits.argmax(dim=1) == (y-1)).float().mean()
+        
+        # Logging
         self.log_dict({
             'val_total_loss': total_loss,
             'val_class_loss': classification_loss,
             'val_recon_loss': reconstruction_loss,
             'val_kl_div': kl_div,
             'val_acc': acc,
-            # Log individual weighted losses for analysis
-            'val_weighted_class_loss': class_weight * classification_loss,
-            'val_weighted_recon_loss': recon_weight * reconstruction_loss,
-            'val_weighted_kl_div': kl_weight * kl_div
         }, on_step=False, on_epoch=True, prog_bar=True)
         
-    
+        return {
+            'val_loss': total_loss,
+            'val_acc': acc
+        }
+        
     def configure_optimizers(self):
         # Create parameter groups with different learning rates
         encoder_params = list(self.encoder.parameters())
         latent_params = list(self.fc_mu.parameters()) + list(self.fc_var.parameters())
-        decoder_params = list(self.decoder.parameters()) + list(self.decoder_input.parameters())
+        decoder_params = list(self.decoder.parameters()) + list(
+            self.decoder_input.parameters()
+        )
         classifier_params = list(self.classifier.parameters())
-        
+
         # Create optimizer with parameter groups
-        optimizer = torch.optim.AdamW([
-            {'params': encoder_params, 'lr': self.lr_encoder},
-            {'params': latent_params, 'lr': self.lr_encoder},
-            {'params': decoder_params, 'lr': self.lr_decoder},
-            {'params': classifier_params, 'lr': self.lr_classifier}
-        ])
-        
-        # Get total steps for scheduler
-        total_steps = self.get_total_steps()
-        
+        optimizer = torch.optim.AdamW(
+            [
+                {"params": encoder_params, "lr": self.lr_encoder},
+                {"params": latent_params, "lr": self.lr_encoder},
+                {"params": decoder_params, "lr": self.lr_decoder},
+                {"params": classifier_params, "lr": self.lr_classifier},
+            ]
+        )
+
         # Create scheduler with calculated total steps
         scheduler = torch.optim.lr_scheduler.PolynomialLR(
-            optimizer,
-            total_iters=total_steps,
-            power=self.poly_power/2
+            optimizer, total_iters=self.trainer.estimated_stepping_batches, power=self.poly_power / 2
         )
-        
+
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step"
-            }
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
         }
+
+        def on_fit_start(self):
+            """Initialize weights when training starts"""
+            super().on_fit_start()
+            # Initial weight update
+            _ = self.get_training_weights()

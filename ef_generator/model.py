@@ -201,7 +201,7 @@ class PretrainedVAE(pl.LightningModule):
             'class_weight': class_weight,
             'recon_weight': recon_weight,
             'kl_weight': kl_weight
-        }, on_step=True, on_epoch=False, prog_bar=True)
+        }, on_step=True, on_epoch=False, prog_bar=False)
         
         return total_loss
 
@@ -236,7 +236,7 @@ class PretrainedVAE(pl.LightningModule):
             'val_recon_loss': reconstruction_loss,
             'val_kl_div': kl_div,
             'val_acc': acc,
-        }, on_step=False, on_epoch=True, prog_bar=True)
+        }, on_step=False, on_epoch=True, prog_bar=False)
         
         return {
             'val_loss': total_loss,
@@ -272,8 +272,8 @@ class PretrainedVAE(pl.LightningModule):
             "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
         }
 
-        def on_fit_start(self):
-            """Initialize weights when training starts"""
-            super().on_fit_start()
-            # Initial weight update
-            _ = self.get_training_weights()
+    def on_fit_start(self):
+        """Initialize weights when training starts"""
+        super().on_fit_start()
+        # Initial weight update
+        _ = self.get_training_weights()

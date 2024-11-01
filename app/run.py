@@ -20,9 +20,10 @@ data_module = EMNISTDataModule()
 # visualize_samples(data_module, num_samples=25, cols=5)
 
 trainer = pl.Trainer(
-    max_epochs=10,
+    max_epochs=2,
     precision="16-mixed",
     callbacks=[ClassificationMetricsCallback(num_classes=26)],
+    profiler="simple",
     )
 trainer.fit(model, data_module)
 

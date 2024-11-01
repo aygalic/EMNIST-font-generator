@@ -194,7 +194,6 @@ class PretrainedVAE(pl.LightningModule):
         # Logging
         self.log_dict({
             'loss': total_loss,
-            'train_total_loss': total_loss,
             'train_class_loss': classification_loss,
             'train_recon_loss': reconstruction_loss,
             'train_kl_div': kl_div,
@@ -204,6 +203,7 @@ class PretrainedVAE(pl.LightningModule):
             'kl_weight': kl_weight
         }, on_step=True, on_epoch=False, prog_bar=True)
         
+        return total_loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
@@ -231,14 +231,18 @@ class PretrainedVAE(pl.LightningModule):
         
         # Logging
         self.log_dict({
-            'val_loss': total_loss,
+            'val_total_loss': total_loss,
             'val_class_loss': classification_loss,
             'val_recon_loss': reconstruction_loss,
             'val_kl_div': kl_div,
             'val_acc': acc,
         }, on_step=False, on_epoch=True, prog_bar=True)
-
-
+        
+        return {
+            'val_loss': total_loss,
+            'val_acc': acc
+        }
+        
     def configure_optimizers(self):
         # Create parameter groups with different learning rates
         encoder_params = list(self.encoder.parameters())

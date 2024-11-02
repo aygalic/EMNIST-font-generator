@@ -15,7 +15,9 @@ from pytorch_lightning.profilers import SimpleProfiler, AdvancedProfiler
 
 # Initialize logger
 logger = TensorBoardLogger("lightning_logs", name="my_model")
-model = PretrainedVAE()
+model = PretrainedVAE(
+    subloss_weights=[1,10,1]
+    )
 data_module = EMNISTDataModule()
 
 
@@ -25,9 +27,8 @@ trainer = pl.Trainer(
     accelerator="mps",
     max_epochs=2,
     callbacks=[ClassificationMetricsCallback(num_classes=26)],
-    profiler="pytorch",
+    profiler="simple",
     devices="auto",
-    subloss_weights=[1,10,1],
     )
 trainer.fit(model, data_module)
 

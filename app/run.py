@@ -10,6 +10,8 @@ from ef_generator.visualization import (
     visualize_samples,
 )
 from ef_generator.callbacks import ValidationLossCallback, ClassificationMetricsCallback
+from pytorch_lightning.profilers import SimpleProfiler, AdvancedProfiler
+
 
 # Initialize logger
 logger = TensorBoardLogger("lightning_logs", name="my_model")
@@ -20,10 +22,12 @@ data_module = EMNISTDataModule()
 # visualize_samples(data_module, num_samples=25, cols=5)
 
 trainer = pl.Trainer(
+    accelerator="mps",
     max_epochs=2,
-    precision="16-mixed",
     callbacks=[ClassificationMetricsCallback(num_classes=26)],
-    profiler="simple",
+    profiler="pytorch",
+    devices="auto",
+    subloss_weights=[1,10,1],
     )
 trainer.fit(model, data_module)
 

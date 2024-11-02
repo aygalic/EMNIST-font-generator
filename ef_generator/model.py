@@ -9,7 +9,7 @@ class PretrainedVAE(pl.LightningModule):
     def __init__(
         self,
         latent_dim=2,
-        sigma=1,
+        subloss_weights=[1,1,1],
         lr_encoder=1e-4,  # Lower learning rate for pretrained encoder
         lr_decoder=1e-3,  # Higher learning rate for decoder
         lr_classifier=1e-3,  # Standard learning rate for classifier
@@ -23,7 +23,7 @@ class PretrainedVAE(pl.LightningModule):
         self.feature_multiplier = 8
         self.poly_power = 2
 
-        self.sigma = sigma
+        self.subloss_weights = subloss_weights
 
         # Register weight tensor as a buffer so it's automatically moved to the right device
         self.register_buffer('_weight_tensor', torch.zeros(3))
@@ -107,11 +107,11 @@ class PretrainedVAE(pl.LightningModule):
         progress = min(self.trainer.global_step / self.trainer.estimated_stepping_batches, 1.0)
         
         # Classification weight starts high and gradually decreases
-        classification_weight = 1.0 - 0.5 * (progress ** self.poly_power)
+        classification_weight = 1.0 - 0.5 * (progress ** self.poly_power) * self.subloss_weights[0]
         # Reconstruction weight increases gradually
-        reconstruction_weight = progress ** (self.poly_power / 2)
+        reconstruction_weight = progress ** (self.poly_power / 2) * self.subloss_weights[1]
         # KL weight increases more slowly
-        kl_weight = (progress ** self.poly_power) * self.sigma
+        kl_weight = (progress ** self.poly_power) * self.subloss_weights[2]
         
         # Update weights in-place
         with torch.no_grad():

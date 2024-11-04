@@ -269,7 +269,7 @@ class PretrainedVAE(pl.LightningModule):
 
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+            #"lr_scheduler": {"scheduler": scheduler, "interval": "step"},
         }
 
     def on_fit_start(self):

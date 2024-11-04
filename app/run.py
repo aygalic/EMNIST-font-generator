@@ -13,31 +13,38 @@ from ef_generator.callbacks import ValidationLossCallback, ClassificationMetrics
 from pytorch_lightning.profilers import SimpleProfiler, AdvancedProfiler
 
 
-# Initialize logger
-logger = TensorBoardLogger("lightning_logs", name="my_model")
-model = PretrainedVAE(
-    subloss_weights=[1,10,1]
-    )
-data_module = EMNISTDataModule()
 
 
-# visualize_samples(data_module, num_samples=25, cols=5)
 
-trainer = pl.Trainer(
-    accelerator="mps",
-    max_epochs=2,
-    callbacks=[ClassificationMetricsCallback(num_classes=26)],
-    profiler="simple",
-    devices="auto",
-    )
-trainer.fit(model, data_module)
-
-
-visualize_reconstructions(model, data_module, num_samples=5)
+def main():
+    # Your existing code here
+    # Initialize logger
+    logger = TensorBoardLogger("lightning_logs", name="my_model")
+    model = PretrainedVAE(
+        subloss_weights=[1,10,1]
+        )
+    data_module = EMNISTDataModule()
 
 
-visualize_latent_space(model, data_module, n_samples=10000, perplexity=30)
+    # visualize_samples(data_module, num_samples=25, cols=5)
 
-# visualize_generated_samples(model)
+    trainer = pl.Trainer(
+        accelerator="mps",
+        max_epochs=2,
+        callbacks=[ClassificationMetricsCallback(num_classes=26)],
+        profiler="simple",
+        devices="auto",
+        )
+    trainer.fit(model, data_module)
 
-visualize_latent_manifold(model)
+
+    visualize_reconstructions(model, data_module, num_samples=5)
+
+
+    visualize_latent_space(model, data_module, n_samples=10000, perplexity=30)
+
+    # visualize_generated_samples(model)
+
+    visualize_latent_manifold(model)
+if __name__ == '__main__':
+    main()

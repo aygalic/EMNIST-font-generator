@@ -81,7 +81,15 @@ class EMNISTDataModule(pl.LightningDataModule):
             self.emnist_test = ProcessedEMNIST(self.data_dir, train=False)
 
     def train_dataloader(self):
-        return DataLoader(self.emnist_train, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(
+            self.emnist_train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            pin_memory=True,
+            num_workers=3,  # Adjust based on your CPU cores
+            #multiprocessing_context='fork'  # This might help on MacOS
+            persistent_workers=True,
+        )
 
     def val_dataloader(self):
         return DataLoader(self.emnist_val, batch_size=self.batch_size)

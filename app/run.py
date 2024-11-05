@@ -9,7 +9,7 @@ from ef_generator.visualization import (
     visualize_reconstructions,
     visualize_samples,
 )
-from ef_generator.callbacks import ValidationLossCallback, ClassificationMetricsCallback
+from ef_generator.callbacks import ValidationLossCallback, ClassificationMetricsCallback, LatentSpaceVisualizer
 from pytorch_lightning.profilers import SimpleProfiler, AdvancedProfiler
 
 
@@ -21,17 +21,23 @@ def main():
     # Initialize logger
     logger = TensorBoardLogger("lightning_logs", name="my_model")
     model = PretrainedVAE(
-        subloss_weights=[1,10,1]
+        subloss_weights=[1,10,1],
+        latent_dim = 4
         )
     data_module = EMNISTDataModule()
-
+    visualizer = LatentSpaceVisualizer(
+        every_n_batches=100,  # Visualize every 100 batches
+        output_dir='latent_vis',  # Directory to save visualizations
+        n=20,  # Grid size
+        digit_size=28  # Size of each digit
+    )
 
     # visualize_samples(data_module, num_samples=25, cols=5)
 
     trainer = pl.Trainer(
         accelerator="mps",
         max_epochs=2,
-        callbacks=[ClassificationMetricsCallback(num_classes=26)],
+        callbacks=[ClassificationMetricsCallback(num_classes=26), visualizer],
         profiler="simple",
         devices="auto",
         )
@@ -46,5 +52,7 @@ def main():
     # visualize_generated_samples(model)
 
     visualize_latent_manifold(model)
-if __name__ == '__main__':
-    main()
+
+
+#if __name__ == '__main__':
+main()

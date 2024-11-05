@@ -154,3 +154,87 @@ class ClassificationMetricsCallback(pl.Callback):
         print("\nWorst performing classes:")
         for cls in worst_classes:
             print(f"Class {chr(cls.item() + 65)}: {per_class_acc[cls]:.3f}")
+
+
+import pytorch_lightning as pl
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+import imageio.v2 as imageio
+
+
+class LatentSpaceVisualizer(pl.Callback):
+    def __init__(self, every_n_batches=100, output_dir='latent_vis', n=20, digit_size=28):
+        """
+        Args:
+            every_n_batches: Generate visualization every N batches
+            output_dir: Directory to save the visualization images
+            n: Grid size for visualization
+            digit_size: Size of each digit image
+        """
+        super().__init__()
+        self.every_n_batches = every_n_batches
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.n = n
+        self.digit_size = digit_size
+        self.batch_count = 0
+        
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        self.batch_count += 1
+        if self.batch_count % self.every_n_batches == 0:
+            self.visualize_latent_space(pl_module)
+    
+    def on_train_end(self, trainer, pl_module):
+        # Create animation from saved images
+        self.create_animation()
+            
+    def visualize_latent_space(self, model):
+        model.eval()
+        grid_x = np.linspace(-3, 3, self.n)
+        grid_y = np.linspace(-3, 3, self.n)[::-1]
+        figure = np.zeros((self.digit_size * self.n, self.digit_size * self.n))
+        
+        with torch.no_grad():
+            for i, yi in enumerate(grid_y):
+                for j, xi in enumerate(grid_x):
+                    z_sample = torch.tensor(
+                        [[xi, yi] + [0] * (model.latent_dim - 2)],
+                        dtype=torch.float32,
+                        device=model.device
+                    )
+                    x_decoded = model.decode(z_sample)
+                    digit = x_decoded[0].reshape(self.digit_size, self.digit_size)
+                    figure[
+                        i * self.digit_size : (i + 1) * self.digit_size,
+                        j * self.digit_size : (j + 1) * self.digit_size,
+                    ] = digit.cpu().numpy()
+        
+        plt.figure(figsize=(10, 10))
+        start_range = self.digit_size // 2
+        end_range = self.n * self.digit_size + start_range
+        pixel_range = np.arange(start_range, end_range, self.digit_size)
+        sample_range_x = np.round(grid_x, 1)
+        sample_range_y = np.round(grid_y, 1)
+        plt.xticks(pixel_range, sample_range_x)
+        plt.yticks(pixel_range, sample_range_y)
+        plt.xlabel("z[0]")
+        plt.ylabel("z[1]")
+        plt.imshow(figure, cmap="Greys_r")
+        plt.title(f"Latent Space Manifold (Batch {self.batch_count})")
+        
+        # Save the figure
+        plt.savefig(self.output_dir / f"latent_space_{self.batch_count:06d}.png")
+        plt.close()
+        
+    def create_animation(self, fps=10):
+        """Create a GIF animation from saved images"""
+        images = []
+        image_files = sorted(self.output_dir.glob("latent_space_*.png"))
+        
+        for filename in image_files:
+            images.append(imageio.imread(filename))
+            
+        # Save as GIF
+        imageio.mimsave(self.output_dir / 'latent_space_evolution.gif', images, fps=fps)

@@ -22,7 +22,7 @@ def main():
     logger = TensorBoardLogger("lightning_logs", name="my_model")
     model = PretrainedVAE(
         subloss_weights=[1,10,1],
-        latent_dim = 4
+        latent_dim = 8
         )
     data_module = EMNISTDataModule()
     visualizer = LatentSpaceVisualizer(
@@ -36,7 +36,7 @@ def main():
 
     trainer = pl.Trainer(
         accelerator="mps",
-        max_epochs=2,
+        max_epochs=3,
         callbacks=[ClassificationMetricsCallback(num_classes=26), visualizer],
         profiler="simple",
         devices="auto",

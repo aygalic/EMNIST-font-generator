@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from torchvision.utils import make_grid
-import seaborn as sns
+
 
 def visualize_samples(data_module, num_samples=25, cols=5):
     # Ensure the data is prepared and set up
@@ -80,14 +81,19 @@ def visualize_latent_space(model, data_module, n_samples=1000, perplexity=30):
     # Apply PCA
     pca = PCA(n_components=2)
     latent_compressed = pca.fit_transform(latent_representations)
-    #breakpoint()
+    # breakpoint()
 
     char = [chr(label + 96) for label in labels]
 
-
     # Plot the results
     plt.figure(figsize=(10, 10))
-    sns.scatterplot(x = latent_compressed[:, 0], y= latent_compressed[:, 1], hue=char,edgecolor=None, palette='Spectral')
+    sns.scatterplot(
+        x=latent_compressed[:, 0],
+        y=latent_compressed[:, 1],
+        hue=char,
+        edgecolor=None,
+        palette="Spectral",
+    )
     plt.title("PCA visualization of the latent space")
     plt.xlabel("PCA feature 1")
     plt.ylabel("PCA feature 2")
@@ -98,7 +104,13 @@ def visualize_latent_space(model, data_module, n_samples=1000, perplexity=30):
     latent_tsne = tsne.fit_transform(latent_representations)
 
     plt.figure(figsize=(10, 10))
-    sns.scatterplot(x = latent_tsne[:, 0], y= latent_tsne[:, 1], hue=char, edgecolor=None, palette='Spectral')
+    sns.scatterplot(
+        x=latent_tsne[:, 0],
+        y=latent_tsne[:, 1],
+        hue=char,
+        edgecolor=None,
+        palette="Spectral",
+    )
     plt.title("t-SNE visualization of the latent space")
     plt.xlabel("t-SNE feature 1")
     plt.ylabel("t-SNE feature 2")

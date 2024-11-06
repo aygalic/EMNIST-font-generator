@@ -37,7 +37,7 @@ def main():
     trainer = pl.Trainer(
         accelerator="mps",
         max_epochs=3,
-        callbacks=[ClassificationMetricsCallback(num_classes=26), visualizer],
+        callbacks=[ClassificationMetricsCallback(num_classes=26)],#, visualizer],
         profiler="simple",
         devices="auto",
         )
@@ -54,5 +54,5 @@ def main():
     visualize_latent_manifold(model)
 
 
-#if __name__ == '__main__':
-main()
+if __name__ == '__main__':
+    main()

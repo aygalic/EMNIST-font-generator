@@ -6,33 +6,36 @@ import torch.nn.functional as F
 
 
 class PretrainedVAE(pl.LightningModule):
+    
     def __init__(
         self,
         latent_dim=2,
         subloss_weights=[1,1,1],
-        lr_encoder=1e-4,  # Lower learning rate for pretrained encoder
-        lr_decoder=1e-3,  # Higher learning rate for decoder
-        lr_classifier=1e-3,  # Standard learning rate for classifier
+        lr_encoder=1e-4,
+        lr_decoder=1e-3,
+        lr_classifier=1e-3,
         reconstruction_weight=1.0,
-        classification_weight=0.1,  # Weight for optional classification during VAE phase
+        classification_weight=0.1,
+        beta=4.0,
+        decoder_depth=3,
     ):
         super().__init__()
         self.latent_dim = latent_dim
-        self.dropout = 0
-
+        self.dropout = 0.1
         self.feature_multiplier = 8
         self.poly_power = 2
-
+        self.beta = beta
         self.subloss_weights = subloss_weights
-
-        # Register weight tensor as a buffer so it's automatically moved to the right device
+        
+        # Register weight tensor as a buffer
         self.register_buffer('_weight_tensor', torch.zeros(3))
-
-        # Encoder
+        
+        # Encoder (unchanged)
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 16 * self.feature_multiplier, 3, stride=2, padding=1),
+            nn.BatchNorm2d(16 * self.feature_multiplier),
             nn.Dropout(self.dropout),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2),
             nn.Conv2d(
                 16 * self.feature_multiplier,
                 32 * self.feature_multiplier,
@@ -40,67 +43,105 @@ class PretrainedVAE(pl.LightningModule):
                 stride=2,
                 padding=1,
             ),
+            nn.BatchNorm2d(32 * self.feature_multiplier),
             nn.Dropout(self.dropout),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2),
             nn.Conv2d(32 * self.feature_multiplier, 64, 7),
+            nn.BatchNorm2d(64),
             nn.Dropout(self.dropout),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2),
             nn.Flatten(),
         )
 
-        # Latent space
-        self.fc_mu = nn.Linear(64, self.latent_dim)
-        self.fc_var = nn.Linear(64, self.latent_dim)
+        # Latent space mappings (unchanged)
+        self.fc_mu = nn.Sequential(
+            nn.Linear(64, 32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, self.latent_dim)
+        )
+        
+        self.fc_var = nn.Sequential(
+            nn.Linear(64, 32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, self.latent_dim)
+        )
 
-        # Decoder
-        self.decoder_input = nn.Linear(self.latent_dim, 64)
+        # Decoder input with proper dimensionality
+        decoder_input_layers = []
+        current_dim = self.latent_dim
+        target_dim = 64  # Final dimension needed before spatial operations
+        
+        # Calculate dimension steps
+        dim_step = int((target_dim - current_dim) / decoder_depth)
+        
+        for i in range(decoder_depth):
+            next_dim = min(current_dim + dim_step, target_dim) if i < decoder_depth-1 else target_dim
+            decoder_input_layers.extend([
+                nn.Linear(current_dim, next_dim),
+                nn.BatchNorm1d(next_dim),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(self.dropout)
+            ])
+            current_dim = next_dim
+            
+        # Reshape to starting spatial dimensions (1x1)
+        decoder_input_layers.append(nn.Unflatten(1, (64, 1, 1)))
+        self.decoder_input = nn.Sequential(*decoder_input_layers)
 
-        self.decoder = nn.Sequential(
-            nn.Unflatten(1, (64, 1, 1)),
+        # Decoder with correct upscaling to 28x28
+        self.decoder = nn.ModuleList()
+        
+        # First deconv block: 1x1 -> 7x7
+        self.decoder.append(nn.Sequential(
             nn.ConvTranspose2d(64, 32 * self.feature_multiplier, 7),
+            nn.BatchNorm2d(32 * self.feature_multiplier),
             nn.Dropout(self.dropout),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2)
+        ))
+        
+        # Second deconv block: 7x7 -> 14x14
+        self.decoder.append(nn.Sequential(
             nn.ConvTranspose2d(
                 32 * self.feature_multiplier,
                 16 * self.feature_multiplier,
                 3,
                 stride=2,
                 padding=1,
-                output_padding=1,
+                output_padding=1
             ),
+            nn.BatchNorm2d(16 * self.feature_multiplier),
             nn.Dropout(self.dropout),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2)
+        ))
+        
+        # Final deconv block: 14x14 -> 28x28
+        self.decoder.append(nn.Sequential(
             nn.ConvTranspose2d(
                 16 * self.feature_multiplier,
                 1,
                 3,
                 stride=2,
                 padding=1,
-                output_padding=1,
+                output_padding=1
             ),
-            nn.Dropout(self.dropout),
-            nn.Sigmoid(),
-        )
+            nn.Sigmoid()
+        ))
 
-        # Classification head
+        # Classifier (unchanged)
         self.classifier = nn.Sequential(
             nn.Linear(64, 128),
-            nn.ReLU(),
-            nn.Linear(128, 26),  # 26 letters, logits
+            nn.LeakyReLU(0.2),
+            nn.Dropout(self.dropout),
+            nn.Linear(128, 26)
         )
 
-        # Learning rates
+        # Initialize other parameters
         self.lr_encoder = lr_encoder
         self.lr_decoder = lr_decoder
         self.lr_classifier = lr_classifier
-
-        # Training weights
         self.reconstruction_weight = reconstruction_weight
         self.classification_weight = classification_weight
-
-        # Track validation metrics
         self.validation_step_outputs = []
-
 
     def get_training_weights(self):
         """Update cached weights and return them as tuple for logging"""        
@@ -152,9 +193,12 @@ class PretrainedVAE(pl.LightningModule):
         eps = torch.randn_like(std)
         return mu + eps * std
 
+
     def decode(self, z):
-        z = self.decoder_input(z)
-        return self.decoder(z)
+        x = self.decoder_input(z)
+        for layer in self.decoder:
+            x = layer(x)
+        return x
 
     def forward(self, x):
         encoded = self.encoder(x)
@@ -172,31 +216,40 @@ class PretrainedVAE(pl.LightningModule):
         z = self.reparameterize(mu, log_var)
         x_hat = self.decode(z)
         
-        
-        # Compute losses
+        # Enhanced loss computation
         logits = self.classifier(encoded)
         classification_loss = F.cross_entropy(logits, y-1)
-        reconstruction_loss = F.mse_loss(x_hat, x, reduction='mean')
-        kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp()) * (self.latent_dim / 784)
+        
+        # Use both MSE and L1 loss for reconstruction
+        mse_loss = F.mse_loss(x_hat, x, reduction='mean')
+        l1_loss = F.l1_loss(x_hat, x, reduction='mean')
+        reconstruction_loss = 0.8 * mse_loss + 0.2 * l1_loss
+        
+        # Modified KL divergence with beta-VAE formulation
+        kl_div = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp())
+        weighted_kl_div = self.beta * kl_div * (self.latent_dim / 784)
         
         # Stack losses for vectorized computation
-        losses = torch.stack([classification_loss, reconstruction_loss, kl_div])
+        losses = torch.stack([classification_loss, reconstruction_loss, weighted_kl_div])
         
         # Update cached weights
         class_weight, recon_weight, kl_weight = self.get_training_weights()
-
+        
         # Compute total loss using cached weights
         total_loss = torch.sum(losses * self._weight_tensor)
         
         # Compute accuracy
         acc = (logits.argmax(dim=1) == (y-1)).float().mean()
         
-        # Logging
+        # Enhanced logging
         self.log_dict({
             'loss': total_loss,
             'train_class_loss': classification_loss,
             'train_recon_loss': reconstruction_loss,
+            'train_mse_loss': mse_loss,
+            'train_l1_loss': l1_loss,
             'train_kl_div': kl_div,
+            'train_weighted_kl_div': weighted_kl_div,
             'train_acc': acc,
             'class_weight': class_weight,
             'recon_weight': recon_weight,
@@ -204,6 +257,7 @@ class PretrainedVAE(pl.LightningModule):
         }, on_step=True, on_epoch=False, prog_bar=False)
         
         return total_loss
+
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
